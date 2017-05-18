@@ -1,0 +1,175 @@
+
+#install.packages("RAdwords")
+library("RAdwords")
+library("data.table")
+library("magrittr")
+library("stringr")
+ 
+google_auth = doAuth()
+
+# client ID
+# 536448202385-o75csrvm1ikbo5clkbi59il76f9lmase.apps.googleusercontent.com
+# client secret
+# _-TKe-xJjT2g0lX_yOyfeK7H
+# developer token
+# pvbkeAs6OUbti-kqA2hc4w
+
+load(file = "awdashboard.RData")
+awdata_all = awtable
+
+since = as.Date(tail(awdata_all$Day,1))+1
+until = Sys.Date()-1
+
+body = statement(select=c('Date','ImageCreativeName ', 'Id', 'AdGroupName','AdGroupId', 'CampaignName', 'Impressions','Cost', 'Clicks','VideoViews',
+                          'VideoQuartile25Rate', 'VideoQuartile50Rate', 'VideoQuartile75Rate', 'VideoQuartile100Rate', 'AllConversions',
+                          'Conversions'),
+                  report="AD_PERFORMANCE_REPORT",
+                  start=since,
+                  end=until)
+ 
+data = getData(clientCustomerId='508-713-2212', google_auth=google_auth ,statement=body)
+
+data = data %>% data.table
+#############################################################################
+
+#Bookings
+body = statement(select=c('Date', 'Id', 'Conversions'),
+                  report="AD_PERFORMANCE_REPORT",
+                 where = "ConversionTypeName IN ['MCC_Booking']",
+                  start=since,
+                  end=until)
+ 
+bkgs = getData(clientCustomerId='508-713-2212', google_auth=google_auth ,statement=body)
+
+bkgs = bkgs %>% data.table
+
+names(bkgs)[names(bkgs) == 'Conversions'] = 'Bookings'
+bkgs$key = paste0(bkgs$Day, '_', bkgs$AdID)
+#############################################################################
+
+
+#Hotel
+body = statement(select=c('Date', 'Id', 'Conversions'),
+                  report="AD_PERFORMANCE_REPORT",
+                 where = "ConversionTypeName IN ['Pesan Basecamp - Hotel Page visit']",
+                  start=since,
+                  end=until)
+ 
+hotel = getData(clientCustomerId='508-713-2212', google_auth=google_auth ,statement=body)
+
+hotel = hotel %>% data.table
+
+names(hotel)[names(hotel) == 'Conversions'] = 'Hotel_page_visits'
+hotel$key = paste0(hotel$Day, '_', hotel$AdID)
+
+names(data)[names(data) == 'Campaign'] = 'campaign_name'
+names(data)[names(data) == 'Imageadname'] = 'ad_name'
+#############################################################################
+
+
+adv_with = function(ucname){
+  ifelse(grepl("_", ucname), return (regexpr("_", ucname)+1 %>%  as.numeric()), return (1))
+}
+
+str_start = function(ucname, title){ #ucname = uncleaned name; title = abbrv of title (PH, CV,...)
+  ifelse(grepl(title, ucname), return (regexpr(title, ucname)+ nchar(title) %>%  as.numeric()), return (-1))
+}
+
+str_ends = function(ucname, title){ #ucname = uncleaned name; title = abbrv of title (PH, CV,...)
+  ifelse(grepl(title, ucname), return (regexpr("_", ucname)-1 %>%  as.numeric()), return (-1))
+}
+
+
+#create key column
+data$key = paste0(data$Day, '_', data$AdID)
+
+#Campaign
+data$nametemp = data$campaign_name
+data$nametemp = paste0(data$nametemp, "_")
+
+data$Campaign = substr(data$nametemp, regexpr("CA",data$nametemp)+3, regexpr("_", data$nametemp)-1)
+data$nametemp = substr(data$nametemp, regexpr("_", data$nametemp) + 1, nchar(data$nametemp))
+
+data$Phase = substr(data$nametemp, regexpr("PH",data$nametemp)+3, regexpr("_", data$nametemp)-1)
+data$nametemp = substr(data$nametemp, regexpr("_", data$nametemp) + 1, nchar(data$nametemp))
+
+data$Channel_temp = substr(data$nametemp, regexpr("C",data$nametemp)+2, regexpr("_", data$nametemp)-1)
+data$nametemp = substr(data$nametemp, regexpr("_", data$nametemp) + 1, nchar(data$nametemp))
+
+data$Audience = ifelse ( str_detect(data$nametemp,"A-"), substr(data$nametemp, str_start(data$nametemp, "A-"), nchar(data$nametemp)-1),"")
+data$nametemp = substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp))
+
+#Ad
+data$nametemp = ifelse(str_detect(data$ad_name, "_PL"),  substr(data$ad_name, regexpr("_PL", data$ad_name)+1, nchar(data$ad_name)), data$ad_name)
+data$nametemp = paste0(data$nametemp, "_")
+
+data$Placement = ifelse ( str_detect(data$nametemp,"PL-"), substr(data$nametemp, str_start(data$nametemp, "PL-"), str_ends(data$nametemp, "PL-")),"")
+data$nametemp = ifelse(str_detect(data$ad_name, "PL-"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+
+data$Creative = ifelse ( str_detect(data$nametemp,"CR-"), substr(data$nametemp, str_start(data$nametemp, "CR-"), str_ends(data$nametemp, "CR-")),"")
+data$nametemp = ifelse(str_detect(data$ad_name, "CR-"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+
+data$Copy_variant = ifelse ( str_detect(data$nametemp,"CV-"), substr(data$nametemp, str_start(data$nametemp, "CV-"), str_ends(data$nametemp, "CV-")),"")
+data$nametemp = ifelse(str_detect(data$ad_name, "CV"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+
+data$Creative_type = ifelse ( str_detect(data$nametemp,"CT"), substr(data$nametemp, str_start(data$nametemp, "CT-"), str_ends(data$nametemp, "CT-")),"")
+data$nametemp = ifelse(str_detect(data$ad_name, "CT"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+
+data$Size = ifelse ( str_detect(data$nametemp,"SZ"), substr(data$nametemp, str_start(data$nametemp, "SZ-"), str_ends(data$nametemp, "SZ-")),"")
+data$nametemp = ifelse(str_detect(data$ad_name, "SZ"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+
+data$nametemp = NULL
+
+#rename YT to Youtube
+for(i in 1:nrow(data)){
+  if(data$Channel_temp[i] == 'YT') data$Channel[i] = 'Youtube'
+  else data$Channel[i] = data$Channel_temp[i]
+
+}
+
+data$Channel_temp = NULL
+
+#new data table
+
+awdata = data.frame()
+#awdata = data.table(awdata)
+awdata = subset(data, select = c('key', 'Day', 'Campaign', 'Phase', 'Channel', 'Audience', 'Placement', 'Creative', 'Copy_variant', 'Creative_type',
+                                 'Cost', 'Impressions', 'Views', 'Clicks', 'Videoplayedto25%', 'Videoplayedto50%', 'Videoplayedto75%',
+                                 'Videoplayedto100%'))
+
+hotel$Day = NULL
+hotel$AdID = NULL
+awdata = merge(awdata, hotel, by="key", all=TRUE)
+awdata[is.na(awdata)] = 0
+
+bkgs$Day = NULL
+bkgs$AdID = NULL
+awdata = merge(awdata, bkgs, by="key", all=TRUE)
+awdata[is.na(awdata)] = 0
+
+ytd_awtable = as.data.frame(awdata)
+save(ytd_awtable, file = "C:/Users/ksinteppadon/Documents/R/Basecamp/ytd_awdashboard.RData")
+
+awdata_all = rbind(awdata_all, awdata, fill=TRUE)
+
+awtable = as.data.frame(awdata_all)
+
+save(awtable, file = "awdashboard.RData")
+save(awtable, file = "C:/Users/ksinteppadon/Documents/R/Basecamp/awdashboard.RData")
+save(awtable, file = "//hk-agdbc-2007/ExternalDataSource/Branding/awdashboard.RData")
+
+#save backup
+bkup = paste0("//bk-agfil-1001/Department/MK/Demand Innovation/Social and Display Experiments/Insights/RData/awdashboard_", Sys.Date(), ".RData")
+save(awtable, file = bkup)
+
+
+# write csv file
+file <- sprintf("awdashboard_output_%s" , Sys.Date()-1)
+Sys.sleep(1)
+setwd("//bk-agfil-1001/Department/MK/Demand Innovation/Social and Display Experiments/Insights/2017 Q1 IDN Campaign")
+write.table(awdata_all , paste0(file,".csv") , row.names = FALSE , sep = "," )
+
+file <- sprintf("awdashboard")
+Sys.sleep(1)
+setwd("C:/Users/ksinteppadon/Documents/R/Basecamp")
+write.table(awdata_all , paste0(file,".csv") , row.names = FALSE , sep = "," )
