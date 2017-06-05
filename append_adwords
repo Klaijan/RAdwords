@@ -17,8 +17,11 @@ google_auth = doAuth()
 load(file = "awdashboard.RData")
 awdata_all = awtable
 
+#awdata_all = awdata_all[-c(3713,3712,3711),]
+
 since = as.Date(tail(awdata_all$Day,1))+1
 until = Sys.Date()-1
+
 
 body = statement(select=c('Date','ImageCreativeName ', 'Id', 'AdGroupName','AdGroupId', 'CampaignName', 'Impressions','Cost', 'Clicks','VideoViews',
                           'VideoQuartile25Rate', 'VideoQuartile50Rate', 'VideoQuartile75Rate', 'VideoQuartile100Rate', 'AllConversions',
@@ -76,7 +79,23 @@ str_start = function(ucname, title){ #ucname = uncleaned name; title = abbrv of 
 }
 
 str_ends = function(ucname, title){ #ucname = uncleaned name; title = abbrv of title (PH, CV,...)
-  ifelse(grepl(title, ucname), return (regexpr("_", ucname)-1 %>%  as.numeric()), return (-1))
+  pos = regexpr(title, ucname)
+  ucname = substr(ucname, pos, nchar(ucname))
+  ifelse(grepl(title, ucname), return (regexpr("_", ucname)-1+pos %>%  as.numeric()), return (-1))
+}
+
+tdetected = function(ucname, title){
+  tchar = nchar(title)
+  spos = str_start(ucname, title)
+  epos = str_ends(ucname, title)
+  return(substr(ucname, spos, epos-1))
+}
+
+ndetected = function(ucname, title){
+  tchar = nchar(title)
+  spos = str_start(ucname, title)
+  epos = str_ends(ucname, title)
+  return(paste0(substr(ucname,0,spos-tchar-1), substr(ucname,epos+1,nchar(ucname)))) #concat the rest of the name together
 }
 
 
@@ -87,36 +106,39 @@ data$key = paste0(data$Day, '_', data$AdID)
 data$nametemp = data$campaign_name
 data$nametemp = paste0(data$nametemp, "_")
 
-data$Campaign = substr(data$nametemp, regexpr("CA",data$nametemp)+3, regexpr("_", data$nametemp)-1)
-data$nametemp = substr(data$nametemp, regexpr("_", data$nametemp) + 1, nchar(data$nametemp))
+data$Campaign = ifelse ( str_detect(data$nametemp,"CA-"), tdetected(data$nametemp,"CA-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"CA-"), ndetected(data$nametemp,"CA-"),data$nametemp)
 
-data$Phase = substr(data$nametemp, regexpr("PH",data$nametemp)+3, regexpr("_", data$nametemp)-1)
-data$nametemp = substr(data$nametemp, regexpr("_", data$nametemp) + 1, nchar(data$nametemp))
+data$Phase = ifelse ( str_detect(data$nametemp,"PH-"), tdetected(data$nametemp,"PH-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"PH-"), ndetected(data$nametemp,"PH-"),data$nametemp)
 
-data$Channel_temp = substr(data$nametemp, regexpr("C",data$nametemp)+2, regexpr("_", data$nametemp)-1)
-data$nametemp = substr(data$nametemp, regexpr("_", data$nametemp) + 1, nchar(data$nametemp))
+data$Channel_temp = ifelse ( str_detect(data$nametemp,"C-"), tdetected(data$nametemp,"C-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"C-"), ndetected(data$nametemp,"C-"),data$nametemp)
 
-data$Audience = ifelse ( str_detect(data$nametemp,"A-"), substr(data$nametemp, str_start(data$nametemp, "A-"), nchar(data$nametemp)-1),"")
-data$nametemp = substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp))
+data$Audience = ifelse ( str_detect(data$nametemp,"A-"), tdetected(data$nametemp,"A-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"A-"), ndetected(data$nametemp,"A-"),data$nametemp)
+
+data$Buying = ifelse ( str_detect(data$nametemp,"B-"), tdetected(data$nametemp,"B-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"B-"), ndetected(data$nametemp,"B-"),data$nametemp)
 
 #Ad
-data$nametemp = ifelse(str_detect(data$ad_name, "_PL"),  substr(data$ad_name, regexpr("_PL", data$ad_name)+1, nchar(data$ad_name)), data$ad_name)
+data$nametemp = data$ad_name
 data$nametemp = paste0(data$nametemp, "_")
 
-data$Placement = ifelse ( str_detect(data$nametemp,"PL-"), substr(data$nametemp, str_start(data$nametemp, "PL-"), str_ends(data$nametemp, "PL-")),"")
-data$nametemp = ifelse(str_detect(data$ad_name, "PL-"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+data$Placement = ifelse ( str_detect(data$nametemp,"PL-"), tdetected(data$nametemp,"PL-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"PL-"), ndetected(data$nametemp,"PL-"),data$nametemp)
 
-data$Creative = ifelse ( str_detect(data$nametemp,"CR-"), substr(data$nametemp, str_start(data$nametemp, "CR-"), str_ends(data$nametemp, "CR-")),"")
-data$nametemp = ifelse(str_detect(data$ad_name, "CR-"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+data$Creative = ifelse ( str_detect(data$nametemp,"CR-"), tdetected(data$nametemp,"CR-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"CR-"), ndetected(data$nametemp,"CR-"),data$nametemp)
 
-data$Copy_variant = ifelse ( str_detect(data$nametemp,"CV-"), substr(data$nametemp, str_start(data$nametemp, "CV-"), str_ends(data$nametemp, "CV-")),"")
-data$nametemp = ifelse(str_detect(data$ad_name, "CV"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+data$Copy_variant = ifelse ( str_detect(data$nametemp,"CV-"), tdetected(data$nametemp,"CV-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"CV-"), ndetected(data$nametemp,"CV-"),data$nametemp)
 
-data$Creative_type = ifelse ( str_detect(data$nametemp,"CT"), substr(data$nametemp, str_start(data$nametemp, "CT-"), str_ends(data$nametemp, "CT-")),"")
-data$nametemp = ifelse(str_detect(data$ad_name, "CT"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+data$Creative_type = ifelse ( str_detect(data$nametemp,"CT-"), tdetected(data$nametemp,"CT-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"CT-"), ndetected(data$nametemp,"CT-"),data$nametemp)
 
-data$Size = ifelse ( str_detect(data$nametemp,"SZ"), substr(data$nametemp, str_start(data$nametemp, "SZ-"), str_ends(data$nametemp, "SZ-")),"")
-data$nametemp = ifelse(str_detect(data$ad_name, "SZ"),  substr(data$nametemp, adv_with(data$nametemp), nchar(data$nametemp)), data$nametemp)
+data$Size = ifelse ( str_detect(data$nametemp,"SZ-"), tdetected(data$nametemp,"SZ-"),"")
+data$nametemp = ifelse ( str_detect(data$nametemp,"SZ-"), ndetected(data$nametemp,"SZ-"),data$nametemp)
 
 data$nametemp = NULL
 
@@ -131,11 +153,11 @@ data$Channel_temp = NULL
 
 #new data table
 
-awdata = data.frame()
-#awdata = data.table(awdata)
-awdata = subset(data, select = c('key', 'Day', 'Campaign', 'Phase', 'Channel', 'Audience', 'Placement', 'Creative', 'Copy_variant', 'Creative_type',
-                                 'Cost', 'Impressions', 'Views', 'Clicks', 'Videoplayedto25%', 'Videoplayedto50%', 'Videoplayedto75%',
-                                 'Videoplayedto100%'))
+# awdata = data.frame()
+# awdata = subset(data, select = c('key', 'Day', 'Campaign', 'Phase', 'Channel', 'Audience', 'Placement', 'Creative', 'Copy_variant', 'Creative_type',
+#                                  'Cost', 'Impressions', 'Views', 'Clicks', 'Videoplayedto25%', 'Videoplayedto50%', 'Videoplayedto75%',
+#                                  'Videoplayedto100%'))
+awdata = data
 
 hotel$Day = NULL
 hotel$AdID = NULL
