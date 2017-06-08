@@ -7,17 +7,9 @@ library("stringr")
  
 google_auth = doAuth()
 
-# client ID
-# 536448202385-o75csrvm1ikbo5clkbi59il76f9lmase.apps.googleusercontent.com
-# client secret
-# _-TKe-xJjT2g0lX_yOyfeK7H
-# developer token
-# pvbkeAs6OUbti-kqA2hc4w
 
 load(file = "awdashboard.RData")
 awdata_all = awtable
-
-#awdata_all = awdata_all[-c(3713,3712,3711),]
 
 since = as.Date(tail(awdata_all$Day,1))+1
 until = Sys.Date()-1
